@@ -11658,6 +11658,48 @@ describe("NextRequest API", () => {
     expect(await request.text()).toBe("state=xyz");
   });
 
+  it.each(["GET", "HEAD"] as const)(
+    "drops a framed body from a %s Request passed as init",
+    async (method) => {
+      // Workers can hand a GET a non-null body (e.g. Content-Length on a GET), and the
+      // route handler request is a Proxy that the Request constructor reads as a plain
+      // dictionary. Next.js never sees this: it nulls GET/HEAD bodies on the way in.
+      const { NextRequest } = await import("../packages/vinext/src/shims/server.js");
+      const source = new Request("https://example.com/api/auth/session", {
+        method,
+        headers: { cookie: "session=abc" },
+      });
+      const framed = new Proxy(source, {
+        get(target, key) {
+          if (key === "body") return new Blob(["hi"]).stream();
+          const value = Reflect.get(target, key, target);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+
+      const request = new NextRequest("https://auth.example.com/api/auth/session", framed);
+
+      expect(request.method).toBe(method);
+      expect(request.cookies.get("session")?.value).toBe("abc");
+      expect(request.body).toBeNull();
+    },
+  );
+
+  it("keeps the cache mode of a framed GET Request passed as init", async () => {
+    const { NextRequest } = await import("../packages/vinext/src/shims/server.js");
+    const init = new Request("https://example.com/api/auth/session", {
+      headers: { cookie: "session=abc" },
+      cache: "no-store",
+    });
+    Object.defineProperty(init, "body", { get: () => new Blob(["hi"]).stream() });
+
+    const request = new NextRequest("https://auth.example.com/api/auth/session", init);
+
+    expect(request.cache).toBe("no-store");
+    expect(request.cookies.get("session")?.value).toBe("abc");
+    expect(request.body).toBeNull();
+  });
+
   it("lets a Request init override a Request input", async () => {
     const { NextRequest } = await import("../packages/vinext/src/shims/server.js");
     const input = new Request("https://example.com/items", { headers: { "x-from": "input" } });

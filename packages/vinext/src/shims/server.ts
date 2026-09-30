@@ -114,6 +114,29 @@ export type RequestInit = globalThis.RequestInit & {
   duplex?: "half";
 };
 
+/**
+ * Workers can hand a GET/HEAD a non-null body (e.g. a GET sent with
+ * Content-Length), which the Request constructor rejects when it reads the init
+ * as a dictionary, as it does for the route handler's tracking Proxy. Next.js
+ * nulls GET/HEAD bodies before user code runs, so drop the body here too.
+ */
+function requestInitFromRequest(request: Request): RequestInit {
+  if ((request.method !== "GET" && request.method !== "HEAD") || request.body === null) {
+    return request;
+  }
+  const cf: unknown = Reflect.get(request, "cf");
+  return {
+    method: request.method,
+    headers: request.headers,
+    // An absent body would inherit the input Request's body.
+    body: null,
+    cache: request.cache,
+    redirect: request.redirect,
+    signal: request.signal,
+    ...(cf !== undefined ? { cf } : {}),
+  } as RequestInit;
+}
+
 export class NextRequest extends Request {
   private _nextUrl: NextURL;
   private _url: string;
@@ -134,7 +157,8 @@ export class NextRequest extends Request {
     // A Request passed as init (e.g. `new NextRequest(url, request)`) keeps its
     // method, headers and body on Request.prototype, so the spread above copies
     // none of them. Hand it to super() as-is, like Next.js does.
-    const requestInit: RequestInit = init instanceof Request ? init : plainInit;
+    const requestInit: RequestInit =
+      init instanceof Request ? requestInitFromRequest(init) : plainInit;
     if (input instanceof Request) {
       // Transfer the body like Next.js does (`super(input, init)`). Cloning here
       // would tee the stream, and the branch left on `input` buffers the entire
