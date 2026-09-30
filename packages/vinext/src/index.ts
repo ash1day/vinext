@@ -313,6 +313,7 @@ import {
 } from "./plugins/import-meta-url.js";
 import { createWorkerImageImportsPlugin } from "./plugins/worker-image-imports.js";
 import { createRequireContextPlugin } from "./plugins/require-context.js";
+import { mayContainCommonJsSyntax } from "./plugins/commonjs-syntax.js";
 import {
   createRequireConditionResolutionPlugin,
   isConditionalRequireScriptModuleId,
@@ -2193,6 +2194,19 @@ export default function vinext(options: VinextOptions = {}): PluginOption[] {
         importMetaUrlCapability.isBundledCommonJsDependencyId(id);
       const projectLocal =
         !bundledDependency && !id.includes("/node_modules/") && !id.includes("\\node_modules\\");
+      // vite-plugin-commonjs strips comments from the whole module before it
+      // consults its filter, then parses it with acorn. Apply the same filter
+      // decision up front, and skip modules without any syntax it could
+      // rewrite, so modules it never transforms skip both passes.
+      const userCondition = commonjsTransformFilter(
+        id,
+        projectLocal && isDev,
+        bundledDependency,
+        importMetaUrlCapability.isBundledCommonJsDependencyId,
+      );
+      if (userCondition === false) return null;
+      if (userCondition !== true && id.includes("node_modules")) return null;
+      if (!mayContainCommonJsSyntax(code)) return null;
       const previousProjectLocal = transformProjectLocalCommonJs;
       const previous = transformBundledCommonJsDependencies;
       transformProjectLocalCommonJs = projectLocal && isDev;
