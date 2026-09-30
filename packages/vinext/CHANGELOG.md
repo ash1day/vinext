@@ -1,5 +1,57 @@
 # vinext
 
+## 1.0.1
+
+### Bug Fixes
+
+- **Pages:** include locale in domain ISR cache identity (#3598)
+- **App Router:** release the refresh abort handle once supplemental requests settle (#3572)
+- **Build:** prerender before emitting standalone output (#3579)
+- **CLI:** recognize symlinked vite entrypoints (#3571) (#3573)
+- **Config:** preserve quoted JSON in dotenv files (#3568)
+- **Router:** preserve middleware and rewrites for missing static assets (#3541)
+- **Shims:** support stable catchError and retry APIs (#3566)
+- **Cloudflare:** support colon cache tags in KV (#3569)
+- **Plugins:** accept HTML comment end variants in request prescan (#3574)
+- **Dev:** pre-bundle use-sync-external-store in the App Router client (#3542)
+- **Tracing:** forward native Workers span metadata (#3564)
+- **Dev:** ignore generated .vinext files in the watcher (#3556)
+- **Init:** list Response Store deployment in next steps (#3536)
+
+### Performance
+
+#### Build
+
+- skip the scan-time typeof window fold when it cannot change imports (#3596)
+- reuse OG HarfBuzz patch and jsx-in-js transforms across passes (#3590)
+- skip stylesheet processing in RSC scan builds (#3589)
+- prefilter optimize-imports matcher on quoted package source (#3550)
+- skip unused sourcemaps in vinext source transforms (#3552)
+- avoid repeated realpath calls in middleware export validation (#3553)
+
+#### SSR
+
+- track dynamic usage without loading the next/headers implementation (#3558)
+- stop loading browser runtime modules for shared helpers (#3559)
+- import the render abort check without server-only modules (#3549)
+
+#### Misc
+
+- **Pages:** avoid repeated SSR asset manifest scans (#3599)
+- **OG:** speed up OG asset readFileSync scan and package-root lookups (#3588)
+- **Plugins:** prescan for require.context calls before parsing (#3562)
+- **App Router:** keep the route scanner out of the RSC runtime graph (#3557)
+- **Plugins:** skip parsing modules without rewritable dynamic requests (#3555)
+- **Dev:** keep the App Router combined handler external in dev (#3548)
+
+### Contributors
+
+- @h-a-n-a
+- @james-elicx
+- @NriotHrreion
+- @SammyTourani
+- @Yi-111-a
+
 ## 1.0.0
 
 ### Features
