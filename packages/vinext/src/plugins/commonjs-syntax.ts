@@ -9,7 +9,9 @@ const COMMONJS_MEMBER_BASE_RE =
   /(?<![\w$]|(?<!\.)\.)(?:module|exports)(?![\w$])[\s)]*(?:\/[*/]|\??\.|\[)/;
 
 /**
- * Conservative source-level superset of what vite-plugin-commonjs rewrites.
+ * Conservative source-level superset of what vite-plugin-commonjs rewrites,
+ * as a transform `filter.code.include` list (a module matches when any
+ * pattern does; strings match as substrings).
  *
  * Its analyzer only acts on calls whose callee is the identifier `require` and
  * on assignments to a member of the identifiers `module` / `exports`, and the
@@ -17,10 +19,15 @@ const COMMONJS_MEMBER_BASE_RE =
  * comments can produce false positives (the module is then analyzed as
  * before), and identifiers written with unicode escapes are never ruled out.
  */
+export const COMMONJS_SYNTAX_CODE_FILTER = [
+  COMMONJS_REQUIRE_CALL_RE,
+  "\\u",
+  COMMONJS_MEMBER_BASE_RE,
+];
+
+/** Whether `code` passes {@link COMMONJS_SYNTAX_CODE_FILTER}. */
 export function mayContainCommonJsSyntax(code: string): boolean {
-  return (
-    COMMONJS_REQUIRE_CALL_RE.test(code) ||
-    code.includes("\\u") ||
-    COMMONJS_MEMBER_BASE_RE.test(code)
+  return COMMONJS_SYNTAX_CODE_FILTER.some((pattern) =>
+    typeof pattern === "string" ? code.includes(pattern) : pattern.test(code),
   );
 }

@@ -2,8 +2,11 @@ import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { describe, expect, it } from "vite-plus/test";
-import { transformWithOxc } from "vite-plus";
-import { mayContainCommonJsSyntax } from "../packages/vinext/src/plugins/commonjs-syntax.js";
+import { build, transformWithOxc } from "vite-plus";
+import {
+  COMMONJS_SYNTAX_CODE_FILTER,
+  mayContainCommonJsSyntax,
+} from "../packages/vinext/src/plugins/commonjs-syntax.js";
 
 type CommonJsTransform = (code: string, id: string) => Promise<{ code: string } | null | undefined>;
 
@@ -105,6 +108,54 @@ async function toJavaScript(file: string): Promise<string | null> {
   }
 }
 
+/** Ids of the given modules that reach a transform filtered by the code filter in a build. */
+async function transformedInBuild(sources: string[]): Promise<string[]> {
+  const modules = new Map(sources.map((code, index) => [`\0module-${index}.js`, code]));
+  const MODULE_ID_RE = /^\0module-/;
+  const transformed: string[] = [];
+  await build({
+    configFile: false,
+    logLevel: "silent",
+    root: FIXTURES_DIR,
+    build: { write: false, rolldownOptions: { input: [...modules.keys()] } },
+    plugins: [
+      {
+        name: "test:modules",
+        resolveId: (id) => (modules.has(id) ? id : null),
+        load: (id) => modules.get(id),
+      },
+      {
+        name: "test:commonjs-filter",
+        enforce: "pre",
+        transform: {
+          filter: { id: MODULE_ID_RE, code: { include: COMMONJS_SYNTAX_CODE_FILTER } },
+          handler(_code, id) {
+            transformed.push(id);
+          },
+        },
+      },
+      {
+        // Some sources are not valid modules on their own.
+        name: "test:empty-modules",
+        transform: { filter: { id: MODULE_ID_RE }, handler: () => "export {};" },
+      },
+    ],
+  });
+  return transformed.sort();
+}
+
+describe("COMMONJS_SYNTAX_CODE_FILTER", () => {
+  it("selects the same modules as a native Rolldown hook filter", async () => {
+    const sources = [...COMMONJS_SOURCES, ...ESM_SOURCES].map(([, code]) => code);
+    const expected = sources
+      .flatMap((code, index) => (mayContainCommonJsSyntax(code) ? [`\0module-${index}.js`] : []))
+      .sort();
+
+    expect(expected).toHaveLength(COMMONJS_SOURCES.length);
+    expect(await transformedInBuild(sources)).toEqual(expected);
+  });
+});
+
 describe("mayContainCommonJsSyntax", () => {
   it.each(COMMONJS_SOURCES)("keeps %s", async (_name, code) => {
     expect(await transformCommonJs(code, "/project/module.js")).toBeTruthy();
@@ -116,7 +167,8 @@ describe("mayContainCommonJsSyntax", () => {
     expect(await transformCommonJs(code, "/project/module.js")).toBeFalsy();
   });
 
-  it("keeps every fixture module vite-plugin-commonjs rewrites", async () => {
+  // Runs oxc and the real plugin over every fixture module.
+  it("keeps every fixture module vite-plugin-commonjs rewrites", { timeout: 30_000 }, async () => {
     const missed: string[] = [];
     let transformed = 0;
     let skipped = 0;
