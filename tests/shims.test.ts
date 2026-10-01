@@ -11685,17 +11685,19 @@ describe("NextRequest API", () => {
     },
   );
 
-  it("keeps the cache mode of a framed GET Request passed as init", async () => {
+  it("keeps the cache mode and integrity of a framed GET Request passed as init", async () => {
     const { NextRequest } = await import("../packages/vinext/src/shims/server.js");
     const init = new Request("https://example.com/api/auth/session", {
       headers: { cookie: "session=abc" },
       cache: "no-store",
+      integrity: "sha256-abc",
     });
     Object.defineProperty(init, "body", { get: () => new Blob(["hi"]).stream() });
 
     const request = new NextRequest("https://auth.example.com/api/auth/session", init);
 
     expect(request.cache).toBe("no-store");
+    expect(request.integrity).toBe("sha256-abc");
     expect(request.cookies.get("session")?.value).toBe("abc");
     expect(request.body).toBeNull();
   });
