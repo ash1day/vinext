@@ -119,8 +119,8 @@ export type RequestInit = globalThis.RequestInit & {
  * Content-Length), which the Request constructor rejects when it reads the init
  * as a dictionary, as it does for the route handler's tracking Proxy. Next.js
  * nulls GET/HEAD bodies before user code runs, so drop the body here too.
- * Every other field workerd reads from a dictionary init is copied, so a framed
- * GET builds the same Request as an unframed one.
+ * Every other standard field, plus workerd's `cf` and `fetcher`, is copied so a
+ * framed GET builds the same Request as an unframed one.
  */
 function requestInitFromRequest(request: Request): RequestInit {
   if ((request.method !== "GET" && request.method !== "HEAD") || request.body === null) {
@@ -134,8 +134,13 @@ function requestInitFromRequest(request: Request): RequestInit {
     // An absent body would inherit the input Request's body.
     body: null,
     cache: request.cache,
+    credentials: request.credentials,
     integrity: request.integrity,
+    keepalive: request.keepalive,
+    mode: request.mode,
     redirect: request.redirect,
+    referrer: request.referrer,
+    referrerPolicy: request.referrerPolicy,
     signal: request.signal,
     ...(cf !== undefined ? { cf } : {}),
     ...(fetcher !== undefined ? { fetcher } : {}),

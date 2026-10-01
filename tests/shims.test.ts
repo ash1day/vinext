@@ -11685,19 +11685,32 @@ describe("NextRequest API", () => {
     },
   );
 
-  it("keeps the cache mode and integrity of a framed GET Request passed as init", async () => {
+  it("keeps the request metadata of a framed GET Request passed as init", async () => {
     const { NextRequest } = await import("../packages/vinext/src/shims/server.js");
     const init = new Request("https://example.com/api/auth/session", {
       headers: { cookie: "session=abc" },
-      cache: "no-store",
+      // only-if-cached is only valid with same-origin mode, so dropping mode would throw.
+      cache: "only-if-cached",
+      credentials: "omit",
       integrity: "sha256-abc",
+      keepalive: true,
+      mode: "same-origin",
+      redirect: "manual",
+      referrer: "https://example.com/login",
+      referrerPolicy: "no-referrer",
     });
     Object.defineProperty(init, "body", { get: () => new Blob(["hi"]).stream() });
 
     const request = new NextRequest("https://auth.example.com/api/auth/session", init);
 
-    expect(request.cache).toBe("no-store");
+    expect(request.cache).toBe("only-if-cached");
+    expect(request.credentials).toBe("omit");
     expect(request.integrity).toBe("sha256-abc");
+    expect(request.keepalive).toBe(true);
+    expect(request.mode).toBe("same-origin");
+    expect(request.redirect).toBe("manual");
+    expect(request.referrer).toBe("https://example.com/login");
+    expect(request.referrerPolicy).toBe("no-referrer");
     expect(request.cookies.get("session")?.value).toBe("abc");
     expect(request.body).toBeNull();
   });
