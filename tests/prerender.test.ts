@@ -2060,6 +2060,70 @@ describe("prerender — generateStaticParams/getStaticPaths errors (#1982)", () 
   // Next.js keeps a route with generateStaticParams() returning [] in its SSG
   // prerender metadata so unknown paths can be generated on demand.
   // https://github.com/vercel/next.js/blob/canary/packages/next/src/build/templates/app-page-runtime.ts
+  // A page that reads cookies() and then redirects (an auth guard) is dynamic
+  // in Next.js (`ƒ` in `next build`). The redirect response carries the same
+  // no-store Cache-Control as any other dynamic render, so it must be skipped
+  // as dynamic rather than reported as a failed generateStaticParams path.
+  it("skips a generateStaticParams path whose dynamic render redirects", async () => {
+    const root = tmpDir("vinext-prerender-dynamic-redirect-");
+    const outDir = path.join(root, "out");
+    const pageDir = path.join(root, "app", "[locale]", "account");
+    fs.mkdirSync(pageDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(root, "app", "[locale]", "layout.tsx"),
+      [
+        "export function generateStaticParams() { return [{ locale: 'en' }]; }",
+        "export default function Layout({ children }) { return children; }",
+      ].join("\n"),
+    );
+    fs.writeFileSync(
+      path.join(pageDir, "page.tsx"),
+      "export default function Page() { return null; }\n",
+    );
+
+    const server = createServer((req, res) => {
+      const url = new URL(req.url ?? "/", "http://127.0.0.1");
+      if (url.pathname === "/__vinext/prerender/static-params") {
+        res.setHeader("content-type", "application/json");
+        res.end(
+          JSON.stringify(
+            url.searchParams.get("pattern") === "layouts:[locale]" ? [{ locale: "en" }] : null,
+          ),
+        );
+        return;
+      }
+      res.statusCode = 307;
+      res.setHeader("cache-control", "private, no-cache, no-store, max-age=0, must-revalidate");
+      res.setHeader("location", "/login");
+      res.end();
+    });
+
+    const port = await listen(server);
+    try {
+      const { prerenderApp } = await import("../packages/vinext/src/build/prerender.js");
+      const { appRouter } = await import("../packages/vinext/src/routing/app-router.js");
+      const { resolveNextConfig } = await import("../packages/vinext/src/config/next-config.js");
+      const result = await prerenderApp({
+        mode: "default",
+        rscBundlePath: path.join(root, "dist", "server", "index.js"),
+        routes: await appRouter(path.join(root, "app")),
+        outDir,
+        config: await resolveNextConfig({}),
+        _prodServer: { server, port },
+      });
+
+      expect(result.routes).toContainEqual({
+        route: "/:locale/account",
+        status: "skipped",
+        reason: "dynamic",
+      });
+      expect(result.routes.filter((route) => route.status === "error")).toEqual([]);
+    } finally {
+      await closeServer(server);
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("retains route-level SSG metadata when generateStaticParams returns no paths", async () => {
     const root = tmpDir("vinext-prerender-empty-gsp-");
     const outDir = path.join(root, "out");
