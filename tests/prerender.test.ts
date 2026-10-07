@@ -2185,6 +2185,65 @@ describe("prerender — generateStaticParams/getStaticPaths errors (#1982)", () 
     }
   });
 
+  // Only redirects are dynamic signals here; a failed no-store render stays an error.
+  it("still reports a generateStaticParams path that fails with a no-store response", async () => {
+    const root = tmpDir("vinext-prerender-no-store-error-");
+    const outDir = path.join(root, "out");
+    const pageDir = path.join(root, "app", "[locale]", "account");
+    fs.mkdirSync(pageDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(root, "app", "[locale]", "layout.tsx"),
+      [
+        "export function generateStaticParams() { return [{ locale: 'en' }]; }",
+        "export default function Layout({ children }) { return children; }",
+      ].join("\n"),
+    );
+    fs.writeFileSync(
+      path.join(pageDir, "page.tsx"),
+      "export default function Page() { return null; }\n",
+    );
+
+    const server = createServer((req, res) => {
+      const url = new URL(req.url ?? "/", "http://127.0.0.1");
+      if (url.pathname === "/__vinext/prerender/static-params") {
+        res.setHeader("content-type", "application/json");
+        res.end(
+          JSON.stringify(
+            url.searchParams.get("pattern") === "layouts:[locale]" ? [{ locale: "en" }] : null,
+          ),
+        );
+        return;
+      }
+      res.statusCode = 500;
+      res.setHeader("cache-control", "private, no-cache, no-store, max-age=0, must-revalidate");
+      res.end();
+    });
+
+    const port = await listen(server);
+    try {
+      const { prerenderApp } = await import("../packages/vinext/src/build/prerender.js");
+      const { appRouter } = await import("../packages/vinext/src/routing/app-router.js");
+      const { resolveNextConfig } = await import("../packages/vinext/src/config/next-config.js");
+      const result = await prerenderApp({
+        mode: "default",
+        rscBundlePath: path.join(root, "dist", "server", "index.js"),
+        routes: await appRouter(path.join(root, "app")),
+        outDir,
+        config: await resolveNextConfig({}),
+        _prodServer: { server, port },
+      });
+
+      expect(result.routes).toContainEqual({
+        route: "/:locale/account",
+        status: "error",
+        error: "RSC handler returned 500",
+      });
+    } finally {
+      await closeServer(server);
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("retains route-level SSG metadata when generateStaticParams returns no paths", async () => {
     const root = tmpDir("vinext-prerender-empty-gsp-");
     const outDir = path.join(root, "out");

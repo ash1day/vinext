@@ -2021,10 +2021,14 @@ export async function prerenderApp({
         );
         const htmlCacheControl = htmlRender.cacheControl;
         if (!htmlRender.ok) {
-          // A dynamic render can end in a redirect or notFound() (for example
-          // an auth guard that reads cookies()). Its no-store response is the
-          // same dynamic signal handled below, not a failed path.
-          if ((isSpeculative || htmlCacheControl.includes("no-store")) && !htmlRender.fatal) {
+          // A dynamic render can end in a redirect (for example an auth guard
+          // that reads cookies()). Its no-store response is the same dynamic
+          // signal handled below, not a failed path. Other failed responses
+          // keep their error, even with no-store.
+          const isDynamicRedirect =
+            [301, 302, 303, 307, 308].includes(htmlRender.status) &&
+            htmlCacheControl.includes("no-store");
+          if ((isSpeculative || isDynamicRedirect) && !htmlRender.fatal) {
             return { route: routePattern, status: "skipped", reason: "dynamic" };
           }
           return {
