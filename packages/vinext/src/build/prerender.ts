@@ -323,10 +323,6 @@ type PrerenderAppOptionsInternal = PrerenderAppOptions & {
 /** Sentinel path used to trigger 404 rendering without a real route match. */
 const NOT_FOUND_SENTINEL_PATH = "/__vinext_nonexistent_for_404__";
 
-// The statuses of a page's redirect(), permanentRedirect(), unauthorized(),
-// forbidden() and notFound().
-const PAGE_SPECIAL_ERROR_STATUSES = new Set([307, 308, 401, 403, 404]);
-
 const DEFAULT_CONCURRENCY = Math.min(os.availableParallelism(), 8);
 
 const RSC_LEGACY_CHUNK_SCRIPT_PREFIX = "self.__VINEXT_RSC_CHUNKS__=self.__VINEXT_RSC_CHUNKS__||[];";
@@ -2025,18 +2021,7 @@ export async function prerenderApp({
         );
         const htmlCacheControl = htmlRender.cacheControl;
         if (!htmlRender.ok) {
-          // A page that reads cookies() before its redirect() or notFound(),
-          // such as an auth guard, is dynamic in Next.js: the dynamic API read
-          // interrupts static generation before the special error is thrown.
-          // Here the render goes on, and its unmarked special error carries
-          // the same no-store as any dynamic render. An error page always
-          // carries no-store, so a 500 keeps its error.
-          // Ported from Next.js: packages/next/src/server/app-render/dynamic-rendering.ts
-          // https://github.com/vercel/next.js/blob/canary/packages/next/src/server/app-render/dynamic-rendering.ts
-          const isDynamicSpecialError =
-            PAGE_SPECIAL_ERROR_STATUSES.has(htmlRender.status) &&
-            htmlCacheControl.includes("no-store");
-          if ((isSpeculative || isDynamicSpecialError) && !htmlRender.fatal) {
+          if (isSpeculative && !htmlRender.fatal) {
             return { route: routePattern, status: "skipped", reason: "dynamic" };
           }
           return {
